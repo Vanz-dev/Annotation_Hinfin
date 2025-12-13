@@ -10,7 +10,7 @@ from deep_translator import GoogleTranslator
 DATA_FILE = "s4_data_for_annotation.jsonl"
 SEGMENT_SIZE = 20
 PILOT_COUNT = 50
-PASSWORD = "7"
+PASSWORD = "finance2025SA"
 ADMIN_EMAIL = "Vanshikaa.Jani@mbzuai.ac.ae"
 
 # Light, soothing themes for segments
