@@ -3,8 +3,9 @@ import json
 import pandas as pd
 from datetime import datetime
 from deep_translator import GoogleTranslator
-import base64
+from streamlit_pdf_viewer import pdf_viewer
 import os
+
 
 # ================================================
 # CONFIG
@@ -16,6 +17,8 @@ PILOT_COUNT = 50
 PASSWORD = "finance2025SA"
 ADMIN_EMAIL = "Vanshikaa.Jani@mbzuai.ac.ae"
 GUIDELINES_PDF = "annotation_SA/Sentiment_analysis_annotation_guidelines_v1.pdf"
+#GUIDELINES_PDF = "Sentiment_analysis_annotation_guidelines_v1.pdf"
+
 
 # Light, soothing themes for segments
 THEMES = {
@@ -32,18 +35,6 @@ DEFAULT_THEME = "#F9FBFF"
 
 st.set_page_config(page_title="Financial Sentiment Annotation", layout="wide")
 
-def display_pdf(path):
-    with open(path, "rb") as f:
-        base64_pdf = base64.b64encode(f.read()).decode("utf-8")
-
-    pdf_display = f"""
-    <iframe src="data:application/pdf;base64,{base64_pdf}"
-            width="100%"
-            height="800px"
-            type="application/pdf">
-    </iframe>
-    """
-    st.markdown(pdf_display, unsafe_allow_html=True)
 
 # ================================================
 # LOAD DATA
@@ -134,11 +125,13 @@ st.title(f"👋 Welcome, {st.session_state.user}")
 
 
 # ================================================
-# GUIDELINES (PDF)
+# GUIDELINES (PDF VIEWER)
 # ================================================
 with st.expander("📘 Annotation Guidelines", expanded=not st.session_state.guidelines_ok):
     st.subheader("📘 Annotation Guidelines (PDF)")
-    display_pdf(GUIDELINES_PDF)
+    pdf_viewer(GUIDELINES_PDF, height=700)
+
+    st.caption("Please read the guidelines carefully before proceeding.")
 
     if not st.session_state.guidelines_ok:
         if st.button("I have read and understood ✔️"):
@@ -148,6 +141,7 @@ with st.expander("📘 Annotation Guidelines", expanded=not st.session_state.gui
 # Block rest of the app until guidelines are accepted
 if not st.session_state.guidelines_ok:
     st.stop()
+
 
 # ================================================
 # SEGMENT SELECTION
