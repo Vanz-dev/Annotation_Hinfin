@@ -7,7 +7,7 @@ from deep_translator import GoogleTranslator
 # ================================================
 # CONFIG
 # ================================================
-DATA_FILE = "s4_data_for_annotation.jsonl"
+DATA_FILE = "annotation_SA/s4_data_for_annotation.jsonl"
 SEGMENT_SIZE = 20
 PILOT_COUNT = 50
 PASSWORD = "finance2025SA"
