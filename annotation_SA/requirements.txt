@@ -1,4 +1,0 @@
-streamlit
-pandas
-deep-translator
-streamlit-pdf-viewer
