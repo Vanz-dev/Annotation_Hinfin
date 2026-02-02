@@ -25,12 +25,10 @@ st.set_page_config(page_title="Text QA Annotation", layout="wide")
 # ======================================================
 # LOAD & NORMALIZE DATA
 # ======================================================
-
-
 def load_qa_items(csv_path):
     df = pd.read_csv(csv_path)
-
     rows = []
+
     for i, row in df.iterrows():
         passage_uid = f"passage_{i+1}"
 
@@ -58,14 +56,13 @@ rest_items = all_items[PILOT_COUNT:]
 def make_segments(items, size, prefix):
     segs = []
     for i in range(0, len(items), size):
-        chunk = items[i:i + size]
-        segs.append((f"{prefix}_{len(segs)+1}", chunk))
+        segs.append((f"{prefix}_{len(segs)+1}", items[i:i+size]))
     return segs
 
 pilot_segments = make_segments(pilot_items, SEGMENT_SIZE, "pilot_segment")
 main_segments = make_segments(rest_items, SEGMENT_SIZE, "segment")
 
-SEGMENT_MAP = {name: items for name, items in (pilot_segments + main_segments)}
+SEGMENT_MAP = dict(pilot_segments + main_segments)
 SEGMENT_LIST = list(SEGMENT_MAP.keys())
 
 # ======================================================
@@ -106,7 +103,7 @@ if not st.session_state.logged_in:
         else:
             st.error("Incorrect password or empty name.")
 
-    if st.session_state.get("login_ok", False):
+    if st.session_state.get("login_ok"):
         st.success(f"Welcome, {st.session_state.user_temp} 👋")
         if st.button("Enter Platform"):
             st.session_state.logged_in = True
@@ -134,7 +131,6 @@ if not st.session_state.guidelines_ok:
 # SEGMENT SELECTION
 # ======================================================
 segment_name = st.selectbox("Select segment", ["-- Select --"] + SEGMENT_LIST)
-
 if segment_name == "-- Select --":
     st.stop()
 
@@ -146,6 +142,8 @@ items = SEGMENT_MAP[segment_name]
 N = len(items)
 idx = st.session_state.idx
 item = items[idx]
+key_base = f"{segment_name}_{idx}"
+saved = st.session_state.annotations.get(key_base, {})
 
 # ======================================================
 # SIDEBAR
@@ -162,7 +160,19 @@ with st.sidebar:
     )
 
     def save_before_jump():
-        st.session_state.annotations[f"{segment_name}_{idx}"] = build_annotation()
+        st.session_state.annotations[key_base] = {
+            "uid": item["uid"],
+            "segment": segment_name,
+            "domain": item["domain"],
+            "passage": item["passage"],
+            "question": item["question"],
+            "gold_answer": item["answer"],
+            "is_answerable": st.session_state.get(f"is_answerable_{key_base}"),
+            "answer_quality": st.session_state.get(f"answer_quality_{key_base}"),
+            "corrected_answer": st.session_state.get(f"corrected_answer_{key_base}"),
+            "annotator": st.session_state.user,
+            "timestamp": datetime.utcnow().isoformat()
+        }
 
     if st.button("Jump ➡️"):
         save_before_jump()
@@ -170,111 +180,46 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("---")
-    
+    st.subheader("📊 Segment Progress")
 
-    completed = sum(
-        1 for i in range(N)
-        if st.session_state.annotations.get(f"{segment_name}_{i}", {}).get("is_answerable") is not None
-    )
-
-
-
-    xp = completed
-    xp_max = N
-    percent = xp / xp_max if xp_max else 0
-
-    st.markdown("### 🧩 Annotation Progress")
-    st.caption(f"**Level:** {segment_name.replace('_', ' ').title()}")
-
-    st.progress(percent)
-
-    st.markdown(
-        f"""
-        🎯 **Completed:** {xp} / {xp_max}  
-        🔓 **Remaining:** {xp_max - xp}
-        """
-    )
-
-    if xp == xp_max:
-        st.success("🏆 Segment Complete! Thank you!")
-
-    streak = 0
-    for i in range(idx - 1, -1, -1):
-        if st.session_state.annotations.get(f"{segment_name}_{i}", {}).get("is_answerable") is not None:
-            streak += 1
+    completed = 0
+    for i in range(N):
+        ann = st.session_state.annotations.get(f"{segment_name}_{i}")
+        if ann and ann.get("is_answerable") is not None:
+            completed += 1
+            st.write(f"🟢 {i+1}. {ann['is_answerable']}")
         else:
-            break
+            st.write(f"⚪ {i+1}. (not done)")
 
-
-
+    st.progress(completed / N)
+    st.caption(f"{completed}/{N} annotated")
 
 # ======================================================
 # MAIN UI
 # ======================================================
 st.markdown(f"### ❓ QA {idx+1} of {N}")
-st.progress((idx+1)/N)
+st.progress((idx + 1) / N)
 
-# ------------------------------------------------------
-# PASSAGE
-# ------------------------------------------------------
+# Passage
 st.markdown("#### 📄 Passage")
-
 with st.container(border=True):
     st.markdown(item["passage"])
     if st.button("🔄 Translate passage"):
         st.info(translate_hi_to_en(item["passage"]))
 
-
-
 q_col, a_col = st.columns(2, gap="large")
 
-# -------------------------
-# QUESTION COLUMN
-# -------------------------
 with q_col:
-    with st.container(border=True):
-        st.markdown("### ❓ Question")
-        st.markdown(
-            f"""
-            <div style="
-                background-color:#F9FAFB;
-                padding:14px 16px;
-                border-radius:8px;
-                font-size:17px;
-                line-height:1.6;
-            ">
-                {item['question']}
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    st.markdown("### ❓ Question")
+    st.markdown(item["question"])
+    if st.button("🔄 Translate question"):
+        st.info(translate_hi_to_en(item["question"]))
 
-        if st.button("🔄 Translate question"):
-            st.info(translate_hi_to_en(item["question"]))
-
-# -------------------------
-# ANSWER COLUMN
-# -------------------------
 with a_col:
-    with st.container(border=True):
-        st.markdown("### 📝 Provided Answer")
-        st.markdown(
-            f"""
-            <div style="
-                background-color:#FFFFFF;
-                padding:14px 16px;
-                border-radius:8px;
-                font-size:17px;
-                line-height:1.6;
-            ">
-                {item['answer']}
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        if st.button("🔄 Translate answer"):
-            st.info(translate_hi_to_en(item["answer"]))
+    st.markdown("### 📝 Provided Answer")
+    st.markdown(item["answer"])
+    if st.button("🔄 Translate answer"):
+        st.info(translate_hi_to_en(item["answer"]))
 
 # ======================================================
 # ANNOTATION PANEL
@@ -286,28 +231,46 @@ with st.container(border=True):
 
     with col1:
         st.markdown("##### Step 1: Answerability")
+
+        # Step 1
+        ans_key = f"is_answerable_{key_base}"
+        if saved and ans_key not in st.session_state:
+            st.session_state[ans_key] = saved.get("is_answerable")
+
         is_answerable = st.radio(
             "Is the question answerable from the passage?",
             ["Yes", "No", "Uncertain"],
-            key="is_answerable"
+            key=ans_key
         )
 
     with col2:
+        st.markdown("##### Step 2: Answer Quality")
+        # Step 2
         answer_quality = "NA"
         corrected_answer = None
-        st.markdown("##### Step 2: Answer Quality")
 
         if is_answerable == "Yes":
+            aq_key = f"answer_quality_{key_base}"
+            if saved and aq_key not in st.session_state:
+                st.session_state[aq_key] = saved.get("answer_quality")
+
             answer_quality = st.radio(
                 "Is the provided answer correct?",
                 ["Correct", "Incorrect", "Uncertain"],
-                key="answer_quality"
+                key=aq_key
             )
 
-            if answer_quality in ["Incorrect"]:
+            if answer_quality == "Incorrect":
+                ca_key = f"corrected_answer_{key_base}"
                 corrected_answer = st.text_area(
                     "Provide corrected / complete answer in Hindi. (You may use the following website to type in Hindi: https://indiatyping.com/index.php/english-to-hindi-typing)",
-                    height=80
+                    value=(
+                        saved.get("corrected_answer")
+                        if isinstance(saved.get("corrected_answer"), str)
+                        else ""
+                    ),
+                    height=80,
+                    key=ca_key
                 )
 
 # ======================================================
@@ -321,9 +284,9 @@ def build_annotation():
         "passage": item["passage"],
         "question": item["question"],
         "gold_answer": item["answer"],
-        "is_answerable": is_answerable,
-        "answer_quality": answer_quality,
-        "corrected_answer": corrected_answer,
+        "is_answerable": st.session_state.get(ans_key),
+        "answer_quality": st.session_state.get(f"answer_quality_{key_base}"),
+        "corrected_answer": st.session_state.get(f"corrected_answer_{key_base}"),
         "annotator": st.session_state.user,
         "timestamp": datetime.utcnow().isoformat()
     }
@@ -332,19 +295,18 @@ prev_col, next_col = st.columns(2)
 
 with prev_col:
     if st.button("⬅️ Previous", disabled=(idx == 0)):
-        st.session_state.annotations[f"{segment_name}_{idx}"] = build_annotation()
         st.session_state.idx -= 1
         st.rerun()
 
 with next_col:
     if idx < N - 1:
         if st.button("Save & Next ➡️"):
-            st.session_state.annotations[f"{segment_name}_{idx}"] = build_annotation()
+            st.session_state.annotations[key_base] = build_annotation()
             st.session_state.idx += 1
             st.rerun()
     else:
         if st.button("Save & Finish 🎉"):
-            st.session_state.annotations[f"{segment_name}_{idx}"] = build_annotation()
+            st.session_state.annotations[key_base] = build_annotation()
             st.success("Segment complete!")
 
 # ======================================================
