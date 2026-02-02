@@ -175,7 +175,6 @@ with st.sidebar:
         }
 
     if st.button("Jump ➡️"):
-        save_before_jump()
         st.session_state.idx = jump_number - 1
         st.rerun()
 
@@ -185,11 +184,30 @@ with st.sidebar:
     completed = 0
     for i in range(N):
         ann = st.session_state.annotations.get(f"{segment_name}_{i}")
+        is_current = (i == idx)
         if ann and ann.get("is_answerable") is not None:
             completed += 1
-            st.write(f"🟢 {i+1}. {ann['is_answerable']}")
+            icon = "🟢"
         else:
-            st.write(f"⚪ {i+1}. (not done)")
+            icon = "⚪"
+
+        if is_current:
+            st.markdown(
+                f"""
+                <div style="
+                    background:#E0F2FE;
+                    border-left:4px solid #0284C7;
+                    padding:8px 12px 10px 12px;
+                    font-weight:800;
+                    margin-bottom:14px; 
+                ">
+                     {icon} {i+1}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(f"{icon} {i+1}")
 
     st.progress(completed / N)
     st.caption(f"{completed}/{N} annotated")
