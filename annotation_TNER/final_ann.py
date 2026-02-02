@@ -176,6 +176,32 @@ N = len(items)
 idx = st.session_state.idx
 item = items[idx]
 
+def build_annotation():
+    return {
+        "uid": item["uid"],
+        "segment": segment_name,
+        "sentence": item["sentence"],
+        "span_text": item["span_text"],
+        "proposed_type": item["proposed_type"],
+
+        # ✅ READ FROM SESSION STATE (never local vars)
+        "is_entity": st.session_state.get(
+            f"is_entity_{segment_name}_{idx}"
+        ),
+
+        "is_type_correct": st.session_state.get(
+            f"is_type_correct_{segment_name}_{idx}"
+        ),
+
+        "corrected_type": st.session_state.get(
+            f"corrected_type_{segment_name}_{idx}"
+        ),
+
+        "annotator": st.session_state.user,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
 # ======================================================
 # SIDEBAR: JUMP + PROGRESS
 # ======================================================
@@ -194,7 +220,6 @@ with st.sidebar:
         st.session_state.annotations[f"{segment_name}_{idx}"] = build_annotation()
 
     if st.button("Jump ➡️"):
-        save_before_jump()
         st.session_state.idx = jump_number - 1
         st.rerun()
 
@@ -204,11 +229,33 @@ with st.sidebar:
     completed = 0
     for i in range(N):
         ann = st.session_state.annotations.get(f"{segment_name}_{i}")
+
+        is_current = (i == idx)
+
         if ann and ann.get("is_entity") is not None:
             completed += 1
-            st.write(f"🟢 {i+1}")
+            icon = "🟢"
         else:
-            st.write(f"⚪ {i+1}")
+            icon = "⚪"
+
+        if is_current:
+            st.markdown(
+                f"""
+                <div style="
+                    background:#E0F2FE;
+                    border-left:4px solid #0284C7;
+                    padding:8px 12px 10px 12px;
+                    font-weight:800;
+                    margin-bottom:14px; 
+                ">
+                     {icon} {i+1}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(f"{icon} {i+1}")
+
 
     st.progress(completed / N)
     st.caption(f"{completed}/{N} annotated")
@@ -304,15 +351,21 @@ with right_decision:
             st.markdown("**Step 1**")
             st.caption("Is the highlighted text a named entity in this sentence?")
 
+            is_entity_key = f"is_entity_{segment_name}_{idx}"
+
             is_entity = st.radio(
                 "Entity validity",
                 ["Yes", "No", "Uncertain"],
-                key="is_entity"
+                key=is_entity_key
             )
+
 
         # -------------------------
         # STEP 2: TYPE VERIFICATION
         # -------------------------
+        type_key = f"is_type_correct_{segment_name}_{idx}"
+        corrected_key = f"corrected_type_{segment_name}_{idx}"
+
         with step2_col:
             st.markdown("**Step 2**")
             st.caption("Is the assigned entity type correct?")
@@ -324,39 +377,26 @@ with right_decision:
                 is_type_correct = st.radio(
                     "Entity type correctness",
                     ["Yes", "No", "Uncertain"],
-                    key="is_type_correct"
+                    key=type_key
                 )
 
                 if is_type_correct == "No":
                     corrected_type = st.selectbox(
                         "Select correct entity type",
                         ENTITY_TYPES,
-                        key="corrected_type"
+                        key=corrected_key
                     )
             else:
                 st.info("-- Skipped: Entity type verification not applicable ---")
 
 
 
-    def build_annotation():
-        return {
-            "uid": item["uid"],
-            "segment": segment_name,
-            "sentence": item["sentence"],
-            "span_text": item["span_text"],
-            "proposed_type": item["proposed_type"],
-            "is_entity": is_entity,
-            "is_type_correct": is_type_correct,
-            "corrected_type": corrected_type,
-            "annotator": st.session_state.user,
-            "timestamp": datetime.utcnow().isoformat()
-        }
+    
 
     prev_col, next_col = st.columns(2)
 
     with prev_col:
         if st.button("⬅️ Previous", disabled=(idx == 0)):
-            st.session_state.annotations[f"{segment_name}_{idx}"] = build_annotation()
             st.session_state.idx -= 1
             st.rerun()
 
