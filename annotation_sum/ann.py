@@ -14,7 +14,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(BASE_DIR, "text_summarization_full_dataset.json")
 GUIDELINES_PDF = os.path.join(BASE_DIR, "sum_annotation_guidelines_v1.pdf")
 
-PASSWORD = "TSUMfinance@2025#!"
+PASSWORD = "TSUMfinance@2025!@#$%"
 ADMIN_EMAIL = "Vanshikaa.Jani@mbzuai.ac.ae"
 
 SEGMENT_SIZE = 10
@@ -166,7 +166,24 @@ with st.sidebar:
     )
 
     def save_before_jump():
-        st.session_state.annotations[f"{segment_name}_{idx}"] = build_annotation()
+        key = f"{segment_name}_{st.session_state.idx}"
+
+        radio_key = f"summary_quality_{segment_name}_{st.session_state.idx}"
+        text_key = f"edited_summary_{segment_name}_{st.session_state.idx}"
+
+        st.session_state.annotations[key] = {
+            "document_id": item["document_id"],
+            "section_id": item["section_id"],
+            "segment": segment_name,
+            "content": item["content"],
+            "original_summary": item["summary"],
+            "summary_quality": st.session_state.get(radio_key),
+            "edited_summary": st.session_state.get(text_key),
+            "method": item.get("method", ""),
+            "annotator": st.session_state.user,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
 
     if st.button("Jump ➡️"):
         save_before_jump()
@@ -177,13 +194,15 @@ with st.sidebar:
     st.subheader("📊 Segment Progress")
 
     completed = 0
+
     for i in range(N):
         ann = st.session_state.annotations.get(f"{segment_name}_{i}")
+
         if ann and ann.get("summary_quality") is not None:
             completed += 1
-            st.write(f"🟢 {i+1}")
+            st.write(f"🟢 {i+1}. {ann['summary_quality']}")
         else:
-            st.write(f"⚪ {i+1}")
+            st.write(f"⚪ {i+1}. (not done)")
 
     st.progress(completed / N)
     st.caption(f"{completed}/{N} annotated")
@@ -226,10 +245,16 @@ with st.container(border=True):
 
     with col1:
         st.markdown("##### Step 1: Summary Quality")
+        radio_key = f"summary_quality_{segment_name}_{idx}"
+        saved = st.session_state.annotations.get(f"{segment_name}_{idx}")
+
+        if saved and radio_key not in st.session_state:
+            st.session_state[radio_key] = saved.get("summary_quality")
+
         summary_quality = st.radio(
-            "Is the summary faithful and adequate?",
-            ["Yes", "No", "Uncertain"],
-            key="summary_quality"
+        "Is the summary faithful and adequate?",
+        ["Yes", "No", "Uncertain"],
+        key=f"summary_quality_{segment_name}_{idx}"
         )
 
     with col2:
@@ -237,11 +262,18 @@ with st.container(border=True):
         st.markdown("##### Step 2: Edit (if needed)")
 
         if summary_quality == "No":
+            prev = st.session_state.annotations.get(f"{segment_name}_{idx}", {})
             edited_summary = st.text_area(
-                "Edit the summary to correct errors (modify only what is necessary. You may use the following website to type in Hindi: https://indiatyping.com/index.php/english-to-hindi-typing).",
-                value=item["summary"],
-                height=220
-            )
+            "Edit the summary",
+            value=(
+                prev.get("edited_summary")
+                if isinstance(prev.get("edited_summary"), str)
+                else item["summary"]
+            ),
+            height=220,
+            key=f"edited_summary_{segment_name}_{idx}"
+        )
+
         elif summary_quality == "Uncertain":
             st.info("Leave the summary unchanged if uncertain.")
 
@@ -255,7 +287,7 @@ def build_annotation():
         "segment": segment_name,
         "content": item["content"],
         "original_summary": item["summary"],
-        "summary_quality": summary_quality,
+        "summary_quality": st.session_state.get(f"summary_quality_{segment_name}_{idx}"),
         "edited_summary": edited_summary,
         "method": item.get("method", ""),
         "annotator": st.session_state.user,
@@ -266,9 +298,9 @@ prev_col, next_col = st.columns(2)
 
 with prev_col:
     if st.button("⬅️ Previous", disabled=(idx == 0)):
-        st.session_state.annotations[f"{segment_name}_{idx}"] = build_annotation()
         st.session_state.idx -= 1
         st.rerun()
+
 
 with next_col:
     if idx < N - 1:
