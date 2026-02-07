@@ -11,14 +11,14 @@ from streamlit_pdf_viewer import pdf_viewer
 # ======================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-DATA_FILE = os.path.join(BASE_DIR, "text_QA_dataset.csv")
+DATA_FILE = os.path.join(BASE_DIR, "text_QA_data_200.csv")
 GUIDELINES_PDF = os.path.join(BASE_DIR, "Text_QA_annotation_guidelines_v1.pdf")
 
-PASSWORD = "TQAfinance@2025#!"
+PASSWORD = "7"
 ADMIN_EMAIL = "Vanshikaa.Jani@mbzuai.ac.ae"
 
-SEGMENT_SIZE = 25
-PILOT_COUNT = 50
+SEGMENT_SIZE = 12
+PILOT_COUNT = 36
 
 st.set_page_config(page_title="Text QA Annotation", layout="wide")
 
@@ -73,7 +73,12 @@ for key, default in {
     "guidelines_ok": False,
     "current_segment": None,
     "idx": 0,
-    "annotations": {}
+    "annotations": {},
+    "passage_idx": 0,
+    "q_idx": 0,
+    "edited_passages": {},
+    "edited_questions": {},
+    "edited_answers": {}
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -137,48 +142,49 @@ if segment_name == "-- Select --":
 if segment_name != st.session_state.current_segment:
     st.session_state.current_segment = segment_name
     st.session_state.idx = 0
+    st.session_state.passage_idx = 0
+    st.session_state.q_idx = 0
+
 
 items = SEGMENT_MAP[segment_name]
-N = len(items)
-idx = st.session_state.idx
-item = items[idx]
-key_base = f"{segment_name}_{idx}"
+
+# Group items by passage
+from collections import OrderedDict
+
+passage_map = OrderedDict()
+for qa in items:
+    pid = qa["uid"].split("_q")[0]
+    passage_map.setdefault(pid, []).append(qa)
+
+segment_passages = list(passage_map.keys())
+
+p_idx = st.session_state.passage_idx
+q_idx = st.session_state.q_idx
+
+current_passage_uid = segment_passages[p_idx]
+passage_qas = passage_map[current_passage_uid]
+
+item = passage_qas[q_idx]
+
+# global QA index (stable, reuse existing logic)
+global_idx = items.index(item)
+key_base = f"{segment_name}_{global_idx}"
 saved = st.session_state.annotations.get(key_base, {})
+
+# Total QAs in this segment (for sidebar & progress)
+N = len(items)
+
+# Current QA position (1-based, global)
+idx = global_idx
+
+
+
 
 # ======================================================
 # SIDEBAR
 # ======================================================
 with st.sidebar:
-    st.subheader("⏭️ Jump to QA")
-
-    jump_number = st.number_input(
-        "QA number:",
-        min_value=1,
-        max_value=N,
-        value=idx + 1,
-        step=1
-    )
-
-    def save_before_jump():
-        st.session_state.annotations[key_base] = {
-            "uid": item["uid"],
-            "segment": segment_name,
-            "domain": item["domain"],
-            "passage": item["passage"],
-            "question": item["question"],
-            "gold_answer": item["answer"],
-            "is_answerable": st.session_state.get(f"is_answerable_{key_base}"),
-            "answer_quality": st.session_state.get(f"answer_quality_{key_base}"),
-            "corrected_answer": st.session_state.get(f"corrected_answer_{key_base}"),
-            "annotator": st.session_state.user,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-
-    if st.button("Jump ➡️"):
-        st.session_state.idx = jump_number - 1
-        st.rerun()
-
-    st.markdown("---")
+    
     st.subheader("📊 Segment Progress")
 
     completed = 0
@@ -218,26 +224,75 @@ with st.sidebar:
 st.markdown(f"### ❓ QA {idx+1} of {N}")
 st.progress((idx + 1) / N)
 
+
+
+
 # Passage
+#st.markdown("#### 📄 Passage")
+#with st.container(border=True):
+#    st.markdown(item["passage"])
+#   if st.button("🔄 Translate passage"):
+#        st.info(translate_hi_to_en(item["passage"]))
+
+
 st.markdown("#### 📄 Passage")
-with st.container(border=True):
-    st.markdown(item["passage"])
-    if st.button("🔄 Translate passage"):
-        st.info(translate_hi_to_en(item["passage"]))
+
+passage_uid = item["uid"].split("_q")[0]
+
+if passage_uid not in st.session_state.edited_passages:
+    st.session_state.edited_passages[passage_uid] = item["passage"]
+
+edited_passage = st.text_area(
+    "Edit passage if needed (applies to all questions below)",
+    st.session_state.edited_passages[passage_uid],
+    height=120
+)
+
+st.session_state.edited_passages[passage_uid] = edited_passage
+
+if st.button("🔄 Translate passage"):
+        st.info(translate_hi_to_en(edited_passage))
+
+
+
 
 q_col, a_col = st.columns(2, gap="large")
 
 with q_col:
     st.markdown("### ❓ Question")
-    st.markdown(item["question"])
+
+    if item["uid"] not in st.session_state.edited_questions:
+        st.session_state.edited_questions[item["uid"]] = item["question"]
+
+    edited_question = st.text_area(
+        "Edit question if needed",
+        st.session_state.edited_questions[item["uid"]],
+        height=80
+    )
+
+    st.session_state.edited_questions[item["uid"]] = edited_question
+
     if st.button("🔄 Translate question"):
-        st.info(translate_hi_to_en(item["question"]))
+        st.info(translate_hi_to_en(edited_question))
+
 
 with a_col:
-    st.markdown("### 📝 Provided Answer")
-    st.markdown(item["answer"])
+    st.markdown("### 📝 Answer")
+
+    if item["uid"] not in st.session_state.edited_answers:
+        st.session_state.edited_answers[item["uid"]] = item["answer"]
+
+    edited_answer = st.text_area(
+        "Edit answer if needed",
+        st.session_state.edited_answers[item["uid"]],
+        height=80
+    )
+
+    st.session_state.edited_answers[item["uid"]] = edited_answer
+
     if st.button("🔄 Translate answer"):
-        st.info(translate_hi_to_en(item["answer"]))
+        st.info(translate_hi_to_en(edited_answer))
+
 
 # ======================================================
 # ANNOTATION PANEL
@@ -267,29 +322,17 @@ with st.container(border=True):
         answer_quality = "NA"
         corrected_answer = None
 
-        if is_answerable == "Yes":
-            aq_key = f"answer_quality_{key_base}"
-            if saved and aq_key not in st.session_state:
-                st.session_state[aq_key] = saved.get("answer_quality")
+        aq_key = f"answer_quality_{key_base}"
+        if saved and aq_key not in st.session_state:
+            st.session_state[aq_key] = saved.get("answer_quality")
 
-            answer_quality = st.radio(
-                "Is the provided answer correct?",
+        answer_quality = st.radio(
+                "Is the provided answer correct? (If incorrect, please provide the correct answer in the text box above)",
                 ["Correct", "Incorrect", "Uncertain"],
                 key=aq_key
             )
 
-            if answer_quality == "Incorrect":
-                ca_key = f"corrected_answer_{key_base}"
-                corrected_answer = st.text_area(
-                    "Provide corrected / complete answer in Hindi. (You may use the following website to type in Hindi: https://indiatyping.com/index.php/english-to-hindi-typing)",
-                    value=(
-                        saved.get("corrected_answer")
-                        if isinstance(saved.get("corrected_answer"), str)
-                        else ""
-                    ),
-                    height=80,
-                    key=ca_key
-                )
+
 
 # ======================================================
 # SAVE / NAVIGATION
@@ -299,29 +342,53 @@ def build_annotation():
         "uid": item["uid"],
         "segment": segment_name,
         "domain": item["domain"],
-        "passage": item["passage"],
-        "question": item["question"],
-        "gold_answer": item["answer"],
+
+        # ORIGINAL
+        "original_passage": item["passage"],
+        "original_question": item["question"],
+        "original_answer": item["answer"],
+
+        # EDITED
+        "edited_passage": st.session_state.edited_passages.get(passage_uid),
+        "edited_question": st.session_state.edited_questions.get(item["uid"]),
+        "edited_answer": st.session_state.edited_answers.get(item["uid"]),
+
+        # LABELS (IAA)
         "is_answerable": st.session_state.get(ans_key),
         "answer_quality": st.session_state.get(f"answer_quality_{key_base}"),
         "corrected_answer": st.session_state.get(f"corrected_answer_{key_base}"),
+
         "annotator": st.session_state.user,
         "timestamp": datetime.utcnow().isoformat()
     }
 
+
 prev_col, next_col = st.columns(2)
 
 with prev_col:
-    if st.button("⬅️ Previous", disabled=(idx == 0)):
-        st.session_state.idx -= 1
+    if st.button("⬅️ Previous"):
+        if q_idx > 0:
+            st.session_state.q_idx -= 1
+        elif p_idx > 0:
+            st.session_state.passage_idx -= 1
+            prev_passage_uid = segment_passages[st.session_state.passage_idx]
+            st.session_state.q_idx = len(passage_map[prev_passage_uid]) - 1
         st.rerun()
+
 
 with next_col:
     if idx < N - 1:
         if st.button("Save & Next ➡️"):
             st.session_state.annotations[key_base] = build_annotation()
-            st.session_state.idx += 1
+
+            if q_idx < len(passage_qas) - 1:
+                st.session_state.q_idx += 1
+            elif p_idx < len(segment_passages) - 1:
+                st.session_state.passage_idx += 1
+                st.session_state.q_idx = 0
+
             st.rerun()
+
     else:
         if st.button("Save & Finish 🎉"):
             st.session_state.annotations[key_base] = build_annotation()
