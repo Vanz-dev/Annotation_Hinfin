@@ -5,10 +5,12 @@ from datetime import datetime
 from deep_translator import GoogleTranslator
 from streamlit_pdf_viewer import pdf_viewer
 import os
+import re
+import streamlit.components.v1 as components
 
-# ======================================================
+
 # CONFIG
-# ======================================================
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DATA_FILE = os.path.join(BASE_DIR, "ocr_corrected_dataset.json")
@@ -22,35 +24,85 @@ PILOT_COUNT = 40
 
 st.set_page_config(page_title="Text Summarization Annotation", layout="wide")
 
-# ======================================================
-# RENDER HELPER (Hindi-friendly)
-# ======================================================
-def render(text, bg="#FAFAFA"):
-    st.markdown(
-        f"""
-        <div style="
-            background-color: {bg};
-            padding: 26px 28px;
-            border-radius: 14px;
-            max-width: 900px;
-            margin: auto;
-            font-size: 19px;
-            line-height: 2.05;
-            font-family: 'Noto Sans Devanagari', 'Mangal', 'Kalimati', sans-serif;
-            color: #0F172A;
-            letter-spacing: 0.015em;
-            word-spacing: 0.05em;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-        ">
-            {text.replace(chr(10), '<br><br>')}
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+#HELPER
 
-# ======================================================
+def render(text, bg="#FAFAFA", height=420, box_id="box"):
+    html = f"""
+    <div id="{box_id}" style="
+        position: relative;
+        background-color:{bg};
+        padding:26px 28px;
+        border-radius:14px;
+        max-width:900px;
+        margin:auto;
+        font-size:19px;
+        line-height:2.05;
+        font-family:'Noto Sans Devanagari','Mangal','Kalimati',sans-serif;
+        color:#0F172A;
+        box-shadow:0 2px 6px rgba(0,0,0,0.05);
+        max-height:{height}px;
+        overflow-y:auto;
+    ">
+
+        <!-- Copy Button -->
+        <div onclick="copyText('{box_id}')"
+            style="
+                position:absolute;
+                top:10px;
+                right:12px;
+                cursor:pointer;
+                background:white;
+                border-radius:8px;
+                padding:4px 6px;
+                border:1px solid #E5E7EB;
+                font-size:14px;
+            ">
+            ⧉
+        </div>
+
+        <!-- Content -->
+        <div id="{box_id}_content">
+            {text.replace(chr(10), "<br><br>")}
+        </div>
+    </div>
+
+    <script>
+    function copyText(id) {{
+        const el = document.getElementById(id + "_content");
+        const text = el.innerText;
+        navigator.clipboard.writeText(text);
+    }}
+    </script>
+    """
+
+    components.html(html, height=height + 20)
+
+
+def highlight_summary_in_source(source, summary):
+    # Split summary into sentences 
+    summary_parts = re.split(r'[।.!?]', summary)
+    
+    highlighted = source
+
+    for part in summary_parts:
+        part = part.strip()
+        if len(part) < 10:  # avoid tiny fragments
+            continue
+
+        # Escape special regex chars
+        pattern = re.escape(part)
+
+        # Replace with highlighted span
+        highlighted = re.sub(
+            pattern,
+            f"<span style='background-color:#FDE68A; padding:2px 4px; border-radius:4px;'>{part}</span>",
+            highlighted
+        )
+
+    return highlighted
+
 # LOAD DATA
-# ======================================================
+
 def load_items(path):
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
@@ -239,7 +291,38 @@ left_col, right_col = st.columns([1.15, 1], gap="large")
 # ------------------------------------------------------
 with left_col:
     st.markdown("#### 📄 Source Content")
-    render(item["content"], bg="#EEF2CB")
+    highlighted_source = highlight_summary_in_source(
+    item["content"],
+    item["summary"]
+    )
+
+    st.markdown("""
+    <div style="
+        max-width:900px;
+        margin:auto;
+        margin-bottom:10px;
+        font-size:14px;
+        color:#475569;
+        display:flex;
+        align-items:center;
+        gap:8px;
+    ">
+        <span style="
+            background:#FDE68A;
+            padding:3px 8px;
+            border-radius:6px;
+            font-weight:500;
+            color:#92400E;
+        ">
+            Highlight
+        </span>
+        <span>
+            indicates content overlapping with the extractive summary
+        </span>
+    </div>
+    """, unsafe_allow_html=True)
+
+    render(highlighted_source, bg="#EEF2CB", height=500, box_id="source_box")
 
     if st.button("🔄 Translate source"):
         st.info(translate_hi_to_en(item["content"]))
@@ -249,7 +332,9 @@ with left_col:
 # ------------------------------------------------------
 with right_col:
     st.markdown("#### ✍️ Provided Summary")
-    render(item["summary"], bg="#F0CECE")
+    st.markdown(" ")
+    st.markdown(" ")
+    render(item["summary"], bg="#F0CECE", height=500, box_id="summary_box")
 
     if st.button("🔄 Translate summary"):
         st.info(translate_hi_to_en(item["summary"]))
