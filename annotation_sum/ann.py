@@ -11,7 +11,7 @@ import os
 # ======================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-DATA_FILE = os.path.join(BASE_DIR, "text_summarization_full_dataset.json")
+DATA_FILE = os.path.join(BASE_DIR, "ocr_corrected_dataset.json")
 GUIDELINES_PDF = os.path.join(BASE_DIR, "sum_annotation_guidelines_v1.pdf")
 
 PASSWORD = "TSUMfinance@2025!@#$%"
