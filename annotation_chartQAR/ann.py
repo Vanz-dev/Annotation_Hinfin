@@ -24,7 +24,7 @@ GUIDELINES_PDF = os.path.join(
     "Chart_QA_annotation_guidelines_v1.pdf"
 )
 
-PASSWORD = "7"
+PASSWORD = "HindifinbenCHARTQAR"
 ADMIN_EMAIL = "Vanshikaa.Jani@mbzuai.ac.ae"
 
 PILOT_COUNT = 50
